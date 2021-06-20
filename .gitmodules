@@ -1,0 +1,6 @@
+[submodule "cubiomes"]
+	path = cubiomes
+	url = https://github.com/Cubitect/cubiomes
+[submodule "slime_seed_finder"]
+	path = slime_seed_finder
+	url = https://github.com/Badel2/slime_seed_finder
