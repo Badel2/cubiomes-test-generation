@@ -20,6 +20,16 @@ cubiomes-test-generation:
 	gcc -Wall -Werror -fwrapv -O2 cubiomes-test-generation.c -o cubiomes-test-generation -Wl,-rpath,${ROOT_DIR} -L. -Lcubiomes -lslime_seed_finder -lcubiomes -lm
 	echo "Compiled with rpath ${ROOT_DIR}"
 
+# I wanted this to be compiled with debug symbols, but cubiomes was already compiled without them.
+# Solution:
+# cd cubiomes
+# make clean
+# make debug
+# cd ..
+test-map-hills:
+	gcc -g -Wall -Werror -fwrapv -O0 test-map-hills.c -o test-map-hills -Wl,-rpath,${ROOT_DIR} -L. -Lcubiomes -lslime_seed_finder -lcubiomes -lm
+	echo "Compiled with rpath ${ROOT_DIR}"
+
 %/Makefile:
 	git submodule update --init --remote --recursive
 
