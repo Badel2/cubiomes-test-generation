@@ -1,10 +1,63 @@
 // clang-format -i cubiomes-test-generation.c -style="{BasedOnStyle: LLVM, IndentWidth: 4,
 // ColumnLimit: 100}"
 #include "cubiomes/generator.h"
+#include "cubiomes/util.h"
 #include "slime_seed_finder.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
+// Since 1.18, biomes have no biome id, so any library can use whatever id they want.
+// Let's normalize to cubiomes biome id.
+// ssf biome id:
+// https://github.com/owengage/fastnbt/blob/master/fastanvil/src/biome.rs
+// cubiomes biome id:
+// https://github.com/Cubitect/cubiomes/blob/master/layers.h
+int ssf_biome_id_to_cubiomes_biome_id(const int ssf_biome_id) {
+    switch (ssf_biome_id) {
+    case 174:
+        return dripstone_caves;
+    case 175:
+        return frozen_peaks;
+    case 176:
+        return grove;
+    case 177:
+        return jagged_peaks;
+    case 178:
+        return lush_caves;
+    case 179:
+        return meadow;
+    case 180:
+        return nether_wastes;
+    case 181:
+        return old_growth_birch_forest;
+    case 182:
+        return old_growth_pine_taiga;
+    case 183:
+        return old_growth_spruce_taiga;
+    case 184:
+        return snowy_plains;
+    case 185:
+        return snowy_slopes;
+    case 186:
+        return sparse_jungle;
+    case 187:
+        return stony_peaks;
+    case 188:
+        return stony_shore;
+    case 189:
+        return windswept_forest;
+    case 190:
+        return windswept_gravelly_hills;
+    case 191:
+        return windswept_hills;
+    case 192:
+        return windswept_savanna;
+    case 193:
+        return wooded_badlands;
+    }
+    return ssf_biome_id;
+}
 
 int compare_biome_map(const int *map, const int *expected, size_t len, size_t *diff_index) {
     size_t *i = diff_index;
@@ -13,10 +66,22 @@ int compare_biome_map(const int *map, const int *expected, size_t len, size_t *d
         if (expected[*i] == -1) {
             continue;
         }
-        if (map[*i] < expected[*i]) {
+        // TODO: There is a bug in 1.18 where chunks that are not fully
+        // generated have biome: Plains So until that's fixed in
+        // slime_seed_finder, ignore plains
+        if (expected[*i] == 1) {
+            continue;
+        }
+        // Conversion not needed, has been done previously
+        // int e = ssf_biome_id_to_cubiomes_biome_id(expected[*i]);
+        int e = expected[*i];
+        if (map[*i] == e) {
+            continue;
+        }
+        if (map[*i] < e) {
             return -1;
         }
-        if (map[*i] > expected[*i]) {
+        if (map[*i] > e) {
             return 1;
         }
     }
@@ -159,6 +224,8 @@ int parse_cubiomes_mc_version(const char *mc_version) {
             return MC_1_16;
         case 17:
             return MC_1_17;
+        case 18:
+            return MC_1_18;
         }
     }
 
@@ -203,19 +270,21 @@ const char *mc_version_to_string(int mc_version_int) {
         return "1.16";
     case MC_1_17:
         return "1.17";
+    case MC_1_18:
+        return "1.18";
     }
     return NULL;
 }
 
-bool mc_version_before_1_15(int mc_version_int) { return mc_version_int < MC_1_15; }
-
 void print_usage() {
     printf("Expected usage:\n");
-    printf("\tcubiomes-test-generation --mc-version $MC_VERSION --input-zip $WORLD_ZIP_PATH\n");
+    printf("\tcubiomes-test-generation --mc-version $MC_VERSION --input-zip $WORLD_ZIP_PATH "
+           "--save-img\n");
 }
 
-int parse_args(int argc, const char **argv, int *mc_version_int, const char **world_zip_path) {
-    if (argc != 5) {
+int parse_args(int argc, const char **argv, int *mc_version_int, const char **world_zip_path,
+               bool *save_img) {
+    if (argc != 5 && argc != 6) {
         printf("Invalid arguments. ");
         print_usage();
         return 1;
@@ -243,17 +312,30 @@ int parse_args(int argc, const char **argv, int *mc_version_int, const char **wo
 
     *world_zip_path = argv[4];
 
+    if (argc == 5) {
+        *save_img = false;
+        return 0;
+    }
+
+    if (strcmp(argv[5], "--save-img")) {
+        printf("Invalid arguments. ");
+        print_usage();
+        return 1;
+    }
+
+    *save_img = true;
     return 0;
 }
 
 // Expected usage:
-// cubiomes-test-generation --mc-version $MC_VERSION --input-zip $WORLD_ZIP_PATH
+// cubiomes-test-generation --mc-version $MC_VERSION --input-zip $WORLD_ZIP_PATH --save-img
 int main(int argc, const char **argv) {
     int mc_version_int = -1;
     const char *world_zip_path = NULL;
+    bool save_img = false;
 
     {
-        int ret = parse_args(argc, argv, &mc_version_int, &world_zip_path);
+        int ret = parse_args(argc, argv, &mc_version_int, &world_zip_path, &save_img);
         if (ret) {
             return ret;
         }
@@ -281,7 +363,7 @@ int main(int argc, const char **argv) {
     printf("Reading world with seed %ld and version %s\n", world_seed, mc_version);
 
     // Read biome map from zip file
-    Map biome_map;
+    Map3D biome_map;
     {
         char *err = read_biome_map_from_mc_world(world_zip_path, mc_version, &biome_map);
         if (err) {
@@ -291,44 +373,69 @@ int main(int argc, const char **argv) {
         }
     }
 
+    // Convert ssf biome id into cubiomes biome id
+    for (size_t i = 0; i < biome_map.sx * biome_map.sy * biome_map.sz; i++) {
+        biome_map.a[i] = ssf_biome_id_to_cubiomes_biome_id(biome_map.a[i]);
+    }
+
+    if (save_img) {
+        char *err = draw_map3d_image_to_file(&biome_map, "biome_map_c_from_zip.png");
+        if (err) {
+            printf("Error saving biome map to file: %s\n", err);
+            free_error_msg(err);
+            return 6;
+        }
+    }
     // Generate the same area using cubiomes
 
-    // Initialize a stack of biome layers.
-    LayerStack g;
-    setupGenerator(&g, mc_version_int);
+    Generator g;
+    setupGenerator(&g, mc_version_int, 0);
 
-    // Extract the desired layer.
-    Layer *layer;
-    if (mc_version_before_1_15(mc_version_int)) {
-        layer = &g.layers[L_VORONOI_1];
-    } else {
-        layer = &g.layers[L_OCEAN_MIX_4];
-    }
-    int64_t areaX = biome_map.x, areaZ = biome_map.z;
-    uint64_t areaWidth = biome_map.w, areaHeight = biome_map.h;
+    applySeed(&g, 0, world_seed);
+
+    Range r;
+    r.scale = 4;
+    r.x = biome_map.x;
+    r.y = biome_map.y;
+    r.z = biome_map.z;
+    r.sx = biome_map.sx;
+    r.sy = biome_map.sy;
+    r.sz = biome_map.sz;
+    // Set the vertical range as a plane near sea level at scale 1:4.
+    // r.y = 15;
 
     // Allocate a sufficient buffer for the biomes
-    int *biomeIds = allocCache(layer, areaWidth, areaHeight);
+    int *biomeIds = allocCache(&g, r);
 
-    // Apply the seed only for the required layers and generate the area.
-    setLayerSeed(layer, world_seed);
-    printf("Generating world with seed %ld and size %ldx%ld (%ld bytes)\n", world_seed, areaWidth,
-           areaHeight, areaWidth * areaHeight);
-    genArea(layer, biomeIds, areaX, areaZ, areaWidth, areaHeight);
+    printf("Generating world with seed %ld and size %dx%dx%d (%ld bytes)\n", world_seed, r.sx, r.sy,
+           r.sz, (uint64_t)r.sx * (uint64_t)r.sy * (uint64_t)r.sz);
+    genBiomes(&g, biomeIds, r);
+
+    if (save_img) {
+        Map3D cubiomes_map = biome_map;
+        cubiomes_map.a = biomeIds;
+        char *err = draw_map3d_image_to_file(&cubiomes_map, "biome_map_c_from_cubiomes.png");
+        if (err) {
+            printf("Error saving biome map to file: %s\n", err);
+            free_error_msg(err);
+            return 7;
+        }
+    }
 
     // Compare biomeIds with biome_map
     size_t diff_index = 0;
-    int different = compare_biome_map(biomeIds, biome_map.a, areaWidth * areaHeight, &diff_index);
+    int different = compare_biome_map(biomeIds, biome_map.a, r.sx * r.sy * r.sz, &diff_index);
     if (different) {
         // TODO: print index of first mismatch
         // let idx = (point.z - area.z) as usize * area.w as usize + (point.x -
         // area.x) as usize;
-        int64_t diff_x = areaX + (diff_index % areaWidth);
-        int64_t diff_z = areaZ + (diff_index / areaWidth);
-        printf("Biome mismatch at (%ld, %ld),", diff_x, diff_z);
+        int64_t diff_x = r.x + (diff_index % r.sx);
+        int64_t diff_z = r.z + ((diff_index / r.sx) % r.sz);
+        int64_t diff_y = r.y + (diff_index / (r.sx * r.sz));
+        printf("Biome mismatch at %ld (%ld, %ld, %ld),", diff_index, diff_x, diff_y, diff_z);
         printf(" expected %d got %d\n", biome_map.a[diff_index], biomeIds[diff_index]);
-        print_array_diff(biomeIds, biome_map.a, areaWidth * areaHeight, diff_index);
-        return 6;
+        print_array_diff(biomeIds, biome_map.a, r.sx * r.sy * r.sz, diff_index);
+        return 8;
     }
 
     printf("All biomes match\n");
