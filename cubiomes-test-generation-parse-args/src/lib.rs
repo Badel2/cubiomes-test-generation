@@ -18,6 +18,8 @@ pub struct Opt {
     input_zip: PathBuf,
     #[structopt(long)]
     save_img: bool,
+    #[structopt(long)]
+    y_level: Option<i64>,
 }
 
 /// Parsed arguments. You need to manually call `free_args` in order to free the memory.
@@ -26,6 +28,13 @@ pub struct Args {
     mc_version: *mut c_char,
     input_zip: *mut c_char,
     save_img: bool,
+    y_level: OptionI64,
+}
+
+#[repr(C)]
+pub struct OptionI64 {
+    is_some: bool,
+    value: i64,
 }
 
 /// Parse args into `parsed_args`. Returns 0 on success, non-0 on error, and exits the program if
@@ -57,17 +66,20 @@ pub unsafe extern "C" fn parse_args(
         mc_version,
         input_zip,
         save_img,
+        y_level,
     } = opt;
 
     let mc_version = CString::new(mc_version).unwrap().into_raw();
     let input_zip = CString::new(input_zip.to_str().unwrap())
         .unwrap()
         .into_raw();
+    let y_level = OptionI64 { is_some: y_level.is_some(), value: y_level.unwrap_or(0) };
 
     let args = Args {
         mc_version,
         input_zip,
         save_img,
+        y_level,
     };
 
     unsafe {
@@ -84,6 +96,7 @@ pub extern "C" fn free_args(parsed_args: Args) {
         mc_version,
         input_zip,
         save_img: _,
+        y_level: _,
     } = parsed_args;
 
     unsafe {

@@ -3,6 +3,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+typedef struct OptionI64 {
+  bool is_some;
+  int64_t value;
+} OptionI64;
+
 /**
  * Parsed arguments. You need to manually call `free_args` in order to free the memory.
  */
@@ -10,6 +15,7 @@ typedef struct Args {
   char *mc_version;
   char *input_zip;
   bool save_img;
+  struct OptionI64 y_level;
 } Args;
 
 /**

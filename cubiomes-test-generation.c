@@ -328,6 +328,20 @@ int main(int argc, const char **argv) {
         }
     }
 
+    // Slice biome map if y_level arg is set
+    // Store original y and sy args, they are needed to free the memory later
+    Map3D original_biome_map = biome_map;
+    if (args.y_level.is_some) {
+	int64_t y_offset = args.y_level.value - biome_map.y;
+	if (y_offset >= biome_map.sy || y_offset < 0) {
+		printf("Error: y_level is outside of bounds. min_y_level=%ld, max_y_level=%ld\n", biome_map.y, biome_map.y + biome_map.sy - 1);
+		return 14;
+	}
+	memcpy(&biome_map.a[0], &biome_map.a[(biome_map.sx * biome_map.sz) * y_offset], biome_map.sx * biome_map.sz);
+	biome_map.y = args.y_level.value;
+	biome_map.sy = 1;
+    }
+
     // Convert ssf biome id into cubiomes biome id
     for (size_t i = 0; i < biome_map.sx * biome_map.sy * biome_map.sz; i++) {
         biome_map.a[i] = ssf_biome_id_to_cubiomes_biome_id(biome_map.a[i]);
@@ -397,7 +411,7 @@ int main(int argc, const char **argv) {
 
     // Clean up.
     free(biomeIds);
-    free_map(biome_map);
+    free_map(original_biome_map);
 
     return 0;
 }
