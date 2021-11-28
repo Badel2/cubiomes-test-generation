@@ -16,7 +16,7 @@ slime_seed_finder:
 # https://stackoverflow.com/a/23324703
 ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
-cubiomes-test-generation:
+cubiomes-test-generation: slime_seed_finder cubiomes
 	gcc -Wall -Werror -fwrapv -O2 cubiomes-test-generation.c -o cubiomes-test-generation -Wl,-rpath,${ROOT_DIR} -L. -Lcubiomes -lslime_seed_finder -lcubiomes -lm
 	echo "Compiled with rpath ${ROOT_DIR}"
 
