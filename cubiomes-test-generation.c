@@ -412,6 +412,7 @@ int main(int argc, const char **argv) {
     // Clean up.
     free(biomeIds);
     free_map(original_biome_map);
+    free_args(args);
 
     return 0;
 }
