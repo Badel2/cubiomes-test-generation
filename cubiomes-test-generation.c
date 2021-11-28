@@ -2,6 +2,7 @@
 // ColumnLimit: 100}"
 #include "cubiomes/generator.h"
 #include "cubiomes/util.h"
+#include "cubiomes_test_generation_parse_args.h"
 #include "slime_seed_finder.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -276,70 +277,24 @@ const char *mc_version_to_string(int mc_version_int) {
     return NULL;
 }
 
-void print_usage() {
-    printf("Expected usage:\n");
-    printf("\tcubiomes-test-generation --mc-version $MC_VERSION --input-zip $WORLD_ZIP_PATH "
-           "--save-img\n");
-}
-
-int parse_args(int argc, const char **argv, int *mc_version_int, const char **world_zip_path,
-               bool *save_img) {
-    if (argc != 5 && argc != 6) {
-        printf("Invalid arguments. ");
-        print_usage();
-        return 1;
-    }
-
-    if (strcmp(argv[1], "--mc-version")) {
-        printf("Invalid arguments. ");
-        print_usage();
-        return 1;
-    }
-
-    if (strcmp(argv[3], "--input-zip")) {
-        printf("Invalid arguments. ");
-        print_usage();
-        return 1;
-    }
-
-    const char *mc_version = argv[2];
-
-    *mc_version_int = parse_cubiomes_mc_version(mc_version);
-    if (*mc_version_int == -1) {
-        printf("Invalid minecraft version: %s\n", mc_version);
-        return 2;
-    }
-
-    *world_zip_path = argv[4];
-
-    if (argc == 5) {
-        *save_img = false;
-        return 0;
-    }
-
-    if (strcmp(argv[5], "--save-img")) {
-        printf("Invalid arguments. ");
-        print_usage();
-        return 1;
-    }
-
-    *save_img = true;
-    return 0;
-}
-
 // Expected usage:
 // cubiomes-test-generation --mc-version $MC_VERSION --input-zip $WORLD_ZIP_PATH --save-img
 int main(int argc, const char **argv) {
-    int mc_version_int = -1;
-    const char *world_zip_path = NULL;
-    bool save_img = false;
+    Args args;
 
     {
-        int ret = parse_args(argc, argv, &mc_version_int, &world_zip_path, &save_img);
+        int ret = parse_args(argc, argv, &args);
         if (ret) {
             return ret;
         }
     }
+
+    int mc_version_int = parse_cubiomes_mc_version(args.mc_version);
+    if (mc_version_int == -1) {
+        printf("Invalid minecraft version: %s\n", args.mc_version);
+        return 2;
+    }
+    const char *world_zip_path = args.input_zip;
 
     const char *mc_version = mc_version_to_string(mc_version_int);
     if (mc_version == NULL) {
@@ -378,7 +333,7 @@ int main(int argc, const char **argv) {
         biome_map.a[i] = ssf_biome_id_to_cubiomes_biome_id(biome_map.a[i]);
     }
 
-    if (save_img) {
+    if (args.save_img) {
         char *err = draw_map3d_image_to_file(&biome_map, "biome_map_c_from_zip.png");
         if (err) {
             printf("Error saving biome map to file: %s\n", err);
@@ -411,7 +366,7 @@ int main(int argc, const char **argv) {
            r.sz, (uint64_t)r.sx * (uint64_t)r.sy * (uint64_t)r.sz);
     genBiomes(&g, biomeIds, r);
 
-    if (save_img) {
+    if (args.save_img) {
         Map3D cubiomes_map = biome_map;
         cubiomes_map.a = biomeIds;
         char *err = draw_map3d_image_to_file(&cubiomes_map, "biome_map_c_from_cubiomes.png");
