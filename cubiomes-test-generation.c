@@ -4,6 +4,7 @@
 #include "cubiomes/util.h"
 #include "cubiomes_test_generation_parse_args.h"
 #include "slime_seed_finder.h"
+#include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -277,6 +278,44 @@ const char *mc_version_to_string(int mc_version_int) {
     return NULL;
 }
 
+void genBiomesAccurate(const Generator *g, int *cache, Range r) {
+    // TODO: range must be exactly at a chunk border
+    assert((r.x & 0x3) == 0);
+    assert((r.y & 0x3) == 0);
+    assert((r.z & 0x3) == 0);
+    // And size must be a multiple of chunk size
+    // TODO: y-level arg breaks because of this requirement
+    assert((r.sx & 0x3) == 0);
+    assert((r.sy & 0x3) == 0);
+    assert((r.sz & 0x3) == 0);
+    // iterate over all the chunks in range
+    // Range coordinates are in 1:4 scale, we want 1:16 scale so divide by 4
+    for (int cy = (r.y) >> 2; cy < (r.y + r.sy) >> 2; cy++) {
+        for (int cz = (r.z) >> 2; cz < (r.z + r.sz) >> 2; cz++) {
+            for (int cx = (r.x) >> 2; cx < (r.x + r.sx) >> 2; cx++) {
+                // Generate accurate biomes for this chunk
+                int chunk_biomes[4][4][4];
+                genBiomeNoiseChunkSection(&g->bn, chunk_biomes, cx, cy, cz, NULL);
+
+                // Copy biomes to output buffer
+                for (int by = 0; by < 4; by++) {
+                    for (int bz = 0; bz < 4; bz++) {
+                        for (int bx = 0; bx < 4; bx++) {
+                            int bb = chunk_biomes[bx][by][bz];
+
+                            int x = (cx << 2) + bx;
+                            int y = (cy << 2) + by;
+                            int z = (cz << 2) + bz;
+                            size_t idx = (x - r.x) + ((z - r.z) * r.sx) + ((y - r.y) * r.sx * r.sz);
+                            cache[idx] = bb;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Expected usage:
 // cubiomes-test-generation --mc-version $MC_VERSION --input-zip $WORLD_ZIP_PATH --save-img
 int main(int argc, const char **argv) {
@@ -380,7 +419,8 @@ int main(int argc, const char **argv) {
 
     printf("Generating world with seed %ld and size %dx%dx%d (%ld bytes)\n", world_seed, r.sx, r.sy,
            r.sz, (uint64_t)r.sx * (uint64_t)r.sy * (uint64_t)r.sz);
-    genBiomes(&g, biomeIds, r);
+    // genBiomes(&g, biomeIds, r);
+    genBiomesAccurate(&g, biomeIds, r);
 
     if (args.save_img) {
         Map3D cubiomes_map = biome_map;
